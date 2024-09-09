@@ -1,0 +1,6 @@
+openai:
+  model: "gpt-4o"
+    
+groq:
+  model: "llama-guard-3-8b"
+    

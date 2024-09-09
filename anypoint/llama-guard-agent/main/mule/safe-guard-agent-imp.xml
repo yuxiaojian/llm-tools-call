@@ -1,0 +1,318 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+
+	<sub-flow name="llama-safe-guard" doc:id="89eddd61-663a-4411-9c5e-1e4657dd3a3b" >
+		<ee:transform doc:name="Transform to Prompt">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+
+var conversation = payload.messages reduce ((item, acc = "") -> 
+    acc ++ item.role ++ ": " ++ item.content ++ "\n\n"
+)
+var role= payload.messages[-1].role
+var promptTemplate = "Task: Check if there is unsafe content in "++ role ++" messages in conversations according to our safety policy with the below categories.
+
+<BEGIN UNSAFE CONTENT CATEGORIES>
+S1: Violent Crimes.
+S2: Non-Violent Crimes.
+S3: Sex Crimes.
+S4: Child Exploitation.
+S5: Defamation.
+S6: Specialized Advice.
+S7: Privacy.
+S8: Intellectual Property.
+S9: Indiscriminate Weapons.
+S10: Hate.
+S11: Self-Harm.
+S12: Sexual Content.
+S13: Elections.
+S14: Code Interpreter Abuse.
+<END UNSAFE CONTENT CATEGORIES>
+
+<BEGIN CONVERSATION>
+
+" ++ conversation ++ "
+
+<END CONVERSATION>
+
+Provide your safety assessment for ONLY THE LAST "++ role ++" in the above conversation:
+- First line must read 'safe' or 'unsafe'.
+- If unsafe, a second line must include a comma-separated list of violated categories."
+---
+{
+    model: p("groq.model"),
+    messages: [
+        {
+            "role": role,
+            "content": promptTemplate
+        }
+    ]
+}]]></ee:set-payload>
+            </ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="storePayload" ><![CDATA[%dw 2.0
+output application/java
+---
+payload]]></ee:set-variable>
+			</ee:variables>
+        </ee:transform>
+        
+        <http:request method="POST" doc:name="Request to Groq API" config-ref="Groq_API_Request_config" path="/openai/v1/chat/completions">
+            <http:headers><![CDATA[#[output application/java
+---
+{
+	"Authorization" : "Bearer " ++ p('secure::groq.api.key'),
+	"Content-Type" : "application/json"
+}]]]></http:headers>
+        </http:request>
+        <ee:transform doc:name="Transform Response">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+vars.storePayload]]></ee:set-payload>
+            </ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="llamaGuard" ><![CDATA[%dw 2.0
+output application/json
+var unsafe_content_categories = {
+    "S1": "Violent Crimes.",
+    "S2": "Non-Violent Crimes.",
+    "S3": "Sex Crimes.",
+    "S4": "Child Exploitation.",
+    "S5": "Defamation.",
+    "S6": "Specialized Advice.",
+    "S7": "Privacy.",
+    "S8": "Intellectual Property.",
+    "S9": "Indiscriminate Weapons.",
+    "S10": "Hate.",
+    "S11": "Self-Harm.",
+    "S12": "Sexual Content.",
+    "S13": "Elections.",
+    "S14": "Code Interpreter Abuse."
+}
+---
+{
+    isSafe: payload.choices[0].message.content startsWith "safe",
+    message: if (payload.choices[0].message.content startsWith "unsafe")
+        "This conversation was flagged for unsafe content: " ++ (
+            payload.choices[0].message.content splitBy "\n"
+            filter ($ != "unsafe")
+            map (unsafe_content_categories[($)] default $)
+            joinBy ", "
+        )
+    else
+        null
+}]]></ee:set-variable>
+			</ee:variables>
+        </ee:transform>
+	</sub-flow>
+	<sub-flow name="agent-tool" doc:id="b868522d-a3ab-4e1b-b38a-a0d6692d3958" >
+		<ee:transform doc:name="Prepare LLM Prompt" doc:id="eaf5f388-2f0d-4c2e-9258-74936fe2efe5">
+			<ee:message>
+			</ee:message>
+			<ee:variables>
+				<ee:set-variable variableName="first_call"><![CDATA[%dw 2.0
+output application/json
+---
+{
+    "model": p('openai.model'),
+    "messages": [
+         {
+            "role": "system",
+            "content": "You are a helpful assistant. For questions about current events or information you are not sure about, use the web_search tool to get up-to-date information from the web."
+        },
+        {
+            "role": "user",
+            "content": (payload.messages filter ($.role == "user"))[0].content
+        }
+    ],
+    "stream": false,
+    "temperature": 0,
+    "tools": [
+        {
+            "type": "function",
+            "function": {
+                "name": "web_search",
+                "description": "Search the web for current information",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The search query"
+                        }
+                    },
+                    "required": [
+                        "query"
+                    ]
+                }
+            }
+        }
+    ]
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<http:request method="POST" doc:name="Assistant" doc:id="cb585270-c5ba-4214-a7f8-655861303f72" config-ref="OpenAI_API_Request_config" path="/v1/chat/completions">
+			<http:body><![CDATA[#[vars.first_call]]]></http:body>
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"Authorization" : "Bearer " ++ p('secure::openai.api.key') default "" 
+}]]]></http:headers>
+		</http:request>
+		<ee:transform doc:name="Parse LLM Response">
+    <ee:message>
+        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+var openAIResponse = payload
+var toolCall = openAIResponse.choices[0].message.tool_calls[0]
+---
+if (openAIResponse.choices[0].finish_reason == "tool_calls" and 
+    toolCall.function.name == "web_search")
+{
+    tavily_request: {
+        method: "POST",
+        path: "/search",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: {
+        	"api_key": p('secure::tavily.api.key'),
+            "query": read(toolCall.function.arguments, "application/json").query,
+            "include_answer": true,
+            "max_results": 5,
+		    "search_depth": "basic",
+		    "include_answer": false,
+		    "include_images": true,
+		    "include_raw_content": false,
+		    "include_domains": [],
+		    "exclude_domains": []
+        }
+    }
+} else {
+    message: openAIResponse.choices[0].message.content
+}]]></ee:set-payload>
+    </ee:message>
+			<ee:variables>
+				<ee:set-variable variableName="first_response"><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-variable>
+			</ee:variables>
+</ee:transform>
+		<choice doc:name="Check for web_search Request">
+    <when expression="#[payload.tavily_request?]">
+        <http:request method="POST" doc:name="Request to web_search Tool" config-ref="Tavily_API_Request_config" path="#[payload.tavily_request.path]">
+					<http:body><![CDATA[#[payload.tavily_request.body]]]></http:body>
+					<http:headers><![CDATA[#[payload.tavily_request.headers]]]></http:headers>
+        </http:request>
+        <ee:transform doc:name="Prepare LLM Request prompt">
+    <ee:message>
+        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+var firstCall = vars.first_call
+var firstResponse = vars.first_response
+var tavilyResponse = payload
+---
+{
+    "model": p('openai.model'),
+    "messages": [
+        {
+            "role": "system",
+            "content": firstCall.messages[0].content,
+            "images": []
+        },
+        {
+            "role": "user",
+            "content": firstCall.messages[1].content,
+            "images": []
+        },
+        {
+            "role": "assistant",
+            "content": "",
+            "images": [],
+            "tool_calls": firstResponse.choices[0].message.tool_calls
+        },
+        {
+            "role": "tool",
+            "content": write(tavilyResponse, "application/json"),
+            "images": [],
+            "tool_call_id": firstResponse.choices[0].message.tool_calls[0].id
+        }
+    ],
+    "tools": firstCall.tools,
+    "stream": firstCall.stream,
+    "temperature": firstCall.temerature
+}]]></ee:set-payload>
+    </ee:message>
+</ee:transform>
+
+<http:request method="POST" doc:name="Assistant" config-ref="OpenAI_API_Request_config" path="/v1/chat/completions">
+    <http:headers><![CDATA[#[output application/java
+---
+{
+	"Authorization" : "Bearer " ++ p('secure::openai.api.key'),
+	"Content-Type" : "application/json"
+}]]]></http:headers>
+</http:request>
+    </when>
+			<otherwise>
+				<set-payload value="#[vars.first_response]" doc:name="Set Payload" doc:id="6bfb4117-aec8-4702-8fc5-b5445bc486d7" />
+    </otherwise>
+</choice>
+		<ee:transform doc:name="Prepare for the Final Response" doc:id="4d6c0802-d6ea-4b55-9075-bb86849a027b">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"messages" :
+	[
+		{
+			"role" : "user",
+			"content" : (vars.first_call.messages filter ($.role == "user") map $.content)[0]
+		},
+		{
+			"role" : "assistant",
+			"content" : payload.choices[0].message.content
+		}
+	]
+
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+	</sub-flow>
+	<flow name="llama-safe-guard-agent" doc:id="f8f3604e-2fd7-4ce0-bc65-91c6d8ea75ba" >
+		<logger level="INFO" doc:name="Logger - start flow" doc:id="37c39622-756e-47da-ad87-06acb3575811" message="Starting the flow"/>
+		<flow-ref doc:name="pre-llama-guard flow" doc:id="ebd1cc6a-7ce5-4689-b8d0-a40f4e85f502" name="llama-safe-guard"/>
+		<choice doc:name="Choice" doc:id="fd483d43-2921-4f0e-9050-88cda68a3e1a" >
+			<when expression="#[vars.llamaGuard.isSafe]">
+				<flow-ref doc:name="Agent with Tool Call Flow" doc:id="56be35c4-8f33-42f7-9133-205c9b694675" name="agent-tool" />
+				<flow-ref doc:name="post-llama-guard flow" doc:id="c89a2ba9-a3e7-4441-b567-80181cd4277e" name="llama-safe-guard" targetValue="#[vars.llamaGuard]" />
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="Logger" doc:id="282fbb5a-1f50-4c8e-9f29-15a05781ef25" message="#[vars.llamaGuard]"/>
+			</otherwise>
+		</choice>
+		<ee:transform doc:name="Transform Message" doc:id="b3e39dca-4c19-4b36-a067-8def1990f9f8" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+if (vars.llamaGuard.isSafe)
+   payload
+else
+   vars.llamaGuard]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger - End Flow" doc:id="da5e4229-e42e-4deb-a3ae-11f158c17cdb" message="Flow is ended"/>
+	</flow>
+</mule>

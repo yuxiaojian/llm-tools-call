@@ -1,0 +1,13 @@
+openai:
+  api:
+    key: "![Ut3HYz5Bxn6l0OTWqBB61cynWDh/QrFlw3Iaz3o57lziCeYKIluXwJhNrlQuzi0TLH4UxbaWhBLylHHCWNZqrQ==]"
+    
+tavily:
+  api:
+    key: "![HYsfgn/g37eFoVTs7W3/4aCNSnNRphDRUZ+eXb+Afvz5CSHZU/LBjTDHDskjz8hL]"
+    
+groq:
+  api:
+    key: "![cJtoT0VGdtaP5gjCZfoA25OrAB4SEVWZ1H/rOy7PAevnd+zBIPjnwAXV33q9Uz7ulOZ1tpWPesZxg5E2HBHK+Q==]"
+
+    

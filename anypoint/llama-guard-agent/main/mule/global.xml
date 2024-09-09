@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:api-gateway="http://www.mulesoft.org/schema/mule/api-gateway"
+	xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd 
+http://www.mulesoft.org/schema/mule/api-gateway http://www.mulesoft.org/schema/mule/api-gateway/current/mule-api-gateway.xsd 
+http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd 
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="ed15c8d8-f16e-4acc-9170-675a6d5a3322" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<http:request-config name="OpenAI_API_Request_config" doc:name="HTTP Request configuration" doc:id="7e4f73af-0d34-486e-92fe-4445830c2a6d" >
+		<http:request-connection host="api.openai.com" protocol="HTTPS"/>
+	</http:request-config>
+		<http:request-config name="Tavily_API_Request_config" doc:name="HTTP Request configuration" doc:id="a2f0060b-d2f3-4071-ae47-40d7795709fe" >
+		<http:request-connection protocol="HTTPS" host="api.tavily.com"/>
+	</http:request-config>
+	<http:request-config name="Groq_API_Request_config" doc:name="HTTP Request configuration">
+        <http:request-connection host="api.groq.com" protocol="HTTPS"/>
+    </http:request-config>
+	
+	<configuration-properties doc:name="Configuration properties" doc:id="955d8d55-3337-4bcb-b26e-9cc76ffbe8ab" file="agent.yaml" />	
+	<apikit:config name="safe-guard-agent-config" api="api/safe-guard-agent.raml" outboundHeadersMapName="outboundHeaders" httpStatusVarName="httpStatus" />
+	 <secure-properties:config name="Secure_Properties_Config" doc:name="Secure Properties Config" doc:id="53b2e9cf-49f4-4df8-b12a-4548c4ee99a4" file="sec-prop.yaml" key="${enc.key}" />
+	<api-gateway:autodiscovery apiId="${api.id}" ignoreBasePath="true" doc:name="API Autodiscovery" doc:id="42797415-6508-4c9e-b9c7-5e18857ed150" flowRef="safe-guard-agent-main" />
+	</mule>

@@ -1,0 +1,31 @@
+#%RAML 1.0
+title: safe-guard-agent
+
+/chat/completion:
+    displayName: agent
+    post:
+      description: 
+      responses:
+        200:
+          body:
+            application/json:
+              example: |
+                {
+                  "messages": [
+                    {
+                      "role": "user",
+                      "content": "What is the current weather in Sydney?"
+                    },
+                    {
+                      "role": "assistant",
+                      "content": "Currently, the weather in Sydney is partly cloudy with a temperature of 18.3°C (64.9°F). The wind is blowing from the west-southwest (WSW) at 13.0 km/h (8.1 mph), and the humidity level is at 39%. The barometric pressure is 1019.0 mb. Visibility is good at 10 kilometers (6 miles), and the UV index is at 7.  \n\nFor more details, you can visit [WeatherAPI](https://www.weatherapi.com/)."
+                    }
+                  ]
+                }
+        500:
+          body:
+            application/json:
+              example: |
+                {
+                  "errorMessage": "The request couldn't be completed."
+                }
