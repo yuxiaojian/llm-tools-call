@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "agent-k8s"
+version = "0.1.0"
+description = ""
+authors = ["yuxiaojian <yuxiaojian@gmail.com>"]
+readme = "README.md"
+#package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.114.0"
+langchain = "^0.2.16"
+langchain_community = "^0.2.16"
+langchain_core = "^0.2.39"
+langgraph-checkpoint-postgres = "^1.0.6"
+langchain_openai = "^0.1.23"
+langgraph = "^0.2.19"
+psycopg_pool = "^3.2.2"
+pydantic = "^2.9.1"
+python-dotenv = "^1.0.1"
+typing_extensions = "^4.12.2"
+uvicorn = "^0.30.6"
+psycopg = {extras = ["binary", "pool"], version = "^3.2.1"}
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

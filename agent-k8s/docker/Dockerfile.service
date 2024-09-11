@@ -1,0 +1,21 @@
+FROM python:3.11.6-slim
+
+WORKDIR /app
+
+# Install poetry
+RUN pip install --no-cache-dir poetry
+
+# Copy only pyproject.toml and poetry.lock (if you have one) first to leverage Docker cache
+COPY pyproject.toml poetry.lock* ./
+
+# Install dependencies
+RUN poetry config virtualenvs.create false \
+    && poetry install --no-interaction --no-ansi
+
+
+COPY agent/ ./agent/
+COPY schema/ ./schema/
+COPY service/ ./service/
+COPY run_service.py .
+
+CMD ["python", "run_service.py"]

@@ -1,6 +1,9 @@
 # Byte-compiled / optimized / DLL files
 **/*.DS_Store
 anypoint/utils
+agent-k8s/*.txt
+agent-k8s/*.db
+
 __pycache__/
 *.py[cod]
 *$py.class
