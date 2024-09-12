@@ -1,0 +1,66 @@
+#k create ns langgraph
+#k create secret -n langgraph generic agent-creds --from-literal=OPENAI_API_KEY="sk-None-xxxx" --from-literal=TAVILY_API_KEY="tvly-xxxx" --from-literal=DB_PASSWORD="xxxx"
+#k create secret docker-registry github-registry   --namespace langgraph   --docker-server=ghcr.io   --docker-username=yuxiaojian   --docker-password="ghp_xxx
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-service
+  namespace: langgraph
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agent-service
+  template:
+    metadata:
+      labels:
+        app: agent-service
+    spec:
+      imagePullSecrets:
+      - name: github-registry
+      containers:
+      - name: agent-service
+        image: ghcr.io/yuxiaojian/agent-service:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: DB_HOST
+          value: "postgres.postgres.svc.cluster.local"
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_NAME
+          value: "langchain"
+        - name: DB_USER
+          value: "langchain_user"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: agent-creds
+              key: DB_PASSWORD
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: agent-creds
+              key: OPENAI_API_KEY
+        - name: TAVILY_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: agent-creds
+              key: TAVILY_API_KEY
+        - name: DB_MAX_CONNECTIONS
+          value: "20"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-service
+  namespace: langgraph
+spec:
+  selector:
+    app: agent-service
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080

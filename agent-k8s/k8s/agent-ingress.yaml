@@ -1,0 +1,48 @@
+# htpasswd -c auth admin  # This will prompt for a password
+# kubectl create secret generic basic-auth --from-file=auth -n langgraph
+# rm auth  # Remove the temporary file
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: langgraph
+data:
+  proxy-buffer-size: "128k"
+  proxy-buffers: "4 256k"
+  proxy-busy-buffers-size: "256k"
+  proxy-read-timeout: "300"
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agent-service-ingress
+  namespace: langgraph
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: basic-auth
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  tls:
+  - hosts:
+      - ollama.service
+    secretName: ollama
+  rules:
+  - host: ollama.service # Replace with your domain
+    http:
+      paths:
+      - path: "/agent(/|$)(.*)"
+        pathType: Prefix
+        backend:
+          service:
+            name: agent-service
+            port:
+              number: 8080
